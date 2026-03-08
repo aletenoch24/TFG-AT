@@ -63,6 +63,7 @@ label {
 /* 6. Inputs y Selects */
 input[type="text"],
 input[type="date"],
+input[type="password"],
 select {
     width: 100%;
     padding: 12px;
@@ -75,6 +76,7 @@ select {
 
 input[type="text"]:focus,
 input[type="date"]:focus,
+input[type="password"]:focus,
 select:focus {
     border-color: #3498db;
     outline: none;
@@ -98,4 +100,52 @@ button {
 
 button:hover {
     background-color: #2980b9;
+}
+
+/* 8. Enlaces inferiores (Login/Registro) */
+.enlace-inferior {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 14px;
+    color: #7f8c8d;
+}
+
+.enlace-inferior a {
+    color: #3498db;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.enlace-inferior a:hover {
+    text-decoration: underline;
+    color: #2980b9;
+}
+
+/* 9. Cabecera y Botón de Cerrar Sesión */
+.cabecera-panel {
+    display: flex;
+    justify-content: flex-end; /* Alinea el contenido a la derecha */
+    margin-bottom: 10px;
+}
+
+.btn-logout {
+    display: flex;
+    align-items: center;
+    gap: 6px; /* Separación exacta entre el icono y el texto */
+    color: #e74c3c;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    transition: color 0.3s ease;
+}
+
+.btn-logout:hover {
+    color: #c0392b; /* Se oscurece un poco al pasar el ratón */
+}
+
+/* El icono SVG hereda automáticamente el color del texto */
+.btn-logout svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
 }
