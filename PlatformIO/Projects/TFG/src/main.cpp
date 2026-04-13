@@ -19,7 +19,7 @@ const char* ssid = "Livebox7-A6B5-WiFi7";
 const char* password = "RQN64Zc75bf2";
 
 //Datos del broker mqtt
-const char* mqtt_server = "192.168.1.16"; 
+const char* mqtt_server = "192.168.1.20"; 
 const int mqtt_port = 1883;
 
 WiFiClient espClient;
@@ -146,7 +146,7 @@ void interfaz() {
         display.setCursor(margen, 70); 
         display.print(asig);
       } else {    //Si no cabe le añadimos ...
-        String textoCortado = asig.substring(0, 22) + " . . .";
+        String textoCortado = asig.substring(0, 21) + " . . .";
         display.setCursor(margen, 70);
         display.print(textoCortado);
       }
@@ -211,7 +211,7 @@ void interfaz2() {
     display.print("Prox.: " + hora);
 
     if(asig.length() > 24) {
-      asig = asig.substring(0,21) + "...";
+      asig = asig.substring(0,23) + "...";
     }
     display.setCursor(5,38);
     display.print(asig);
@@ -382,13 +382,14 @@ void setup() {
       tiempoInicio = millis();
       while (millis() - tiempoInicio < 5000) {
         client.loop();
-        //Si se ha recibido un mensaje y hay un cambio en el mensaje se dibuja.
-        if(mensajeRecibido && cambio) {
-          display.init(115200);
-          interfaz();
-
-          pantalla_actual = 0;
-          Serial.println("Dibujado completo. Entrando en reposo...");
+        // En cuanto recibimos el mensaje retenido, comprobamos si hay que dibujar y salimos del bucle
+        if(mensajeRecibido) {
+          if(cambio) {
+            display.init(115200);
+            interfaz();
+            pantalla_actual = 0;
+            Serial.println("Dibujado completo.");
+          }
           break;
         }
       }

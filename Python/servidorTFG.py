@@ -6,12 +6,13 @@ import sqlite3
 import unicodedata
 
 #Datos para la conexion MQTT
-broker = "192.168.1.16"
+broker = "192.168.1.20"
 puerto = 1883
 
 #Crea el cliente y se conecta
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.connect(broker, puerto, 60)
+client.loop_start() # Inicia el hilo en segundo plano de MQTT para procesar envíos y KeepAlive
 
 #Horario provisional
 horario_semanal = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -174,7 +175,7 @@ def obtener_horario_aula(aula,cursor):
         hora = datetime.now()
         minutos = hora.hour * 60 + hora.minute
 
-        #hora2 = "03:00"
+        #hora2 = "10:00"
         #minutos = hora_a_minutos(hora2)
         
         minutos_inicio = hora_a_minutos(clase["hora_inicio"])   #Minutos hora_inicio
