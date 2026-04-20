@@ -14,12 +14,15 @@
 #define EPD_RST  16
 #define EPD_BUSY 4
 
+// Pin de lectura de batería interno de la Lilygo T5
+#define BATT_PIN 35
+
 //Datos de red
 const char* ssid = "Livebox7-A6B5-WiFi7";
 const char* password = "RQN64Zc75bf2";
 
 //Datos del broker mqtt
-const char* mqtt_server = "192.168.1.20"; 
+const char* mqtt_server = "192.168.1.17"; 
 const int mqtt_port = 1883;
 
 WiFiClient espClient;
@@ -63,13 +66,13 @@ void imprimir_motivo_despertar() {
 
   switch(wakeup_reason) {
     case ESP_SLEEP_WAKEUP_EXT0: 
-        Serial.println(">> Desperté por el BOTÓN físico"); 
+        Serial.println(" Desperté por el BOTÓN físico"); 
         break;
     case ESP_SLEEP_WAKEUP_TIMER: 
-        Serial.println(">> Desperté por el TEMPORIZADOR (Ciclo normal)"); 
+        Serial.println(" Desperté por el TEMPORIZADOR "); 
         break;
     default: 
-        Serial.println(">> Desperté por un REINICIO o primera vez"); 
+        Serial.println("Desperté por un REINICIO o primera vez"); 
         break;
   }
 }
@@ -84,6 +87,52 @@ void centrarTexto(String texto, int y) {
 
   display.setCursor(x, y);
   display.print(texto);
+}
+
+// Función para calcular el porcentaje de batería
+int getBatteryPercentage() {
+  analogSetPinAttenuation(BATT_PIN, ADC_11db); // Permite leer hasta ~3.3V
+
+  // Lectura "basura" para estabilizar el circuito interno
+  analogRead(BATT_PIN); 
+  delay(5);
+
+  int raw_value = analogRead(BATT_PIN);
+  Serial.print("ADC Value: ");
+  Serial.println(String(raw_value));
+  
+  // El divisor de voltaje corta a la mitad (*2), el 3.3V es la referencia del ADC, 
+  // y 4095 es la resolución. 1.1 es un factor de corrección típico en los ESP32.
+  float voltage = (raw_value / 4095.0) * 3.3 * 2.0 * 1.1; 
+  
+  // Mapear de voltaje a porcentaje (4.2V max, 3.2V min para LiPo)
+  int percentage = (voltage - 3.2) / (4.2 - 3.2) * 100;
+  Serial.print("Porcentaje: ");
+  Serial.println(String(percentage));
+  
+  if (percentage > 100) percentage = 100;
+  if (percentage < 0) percentage = 0;
+  
+  return percentage;
+}
+
+// Función para dibujar el icono de batería
+void dibujarBateria(int x, int y) {
+  int porcentaje = getBatteryPercentage();
+  
+  // Dibujar el marco de la pila
+  display.drawRect(x, y, 20, 10, GxEPD_BLACK);
+  display.fillRect(x + 20, y + 2, 2, 6, GxEPD_BLACK); // Borne positivo
+  
+  // Rellenar según el porcentaje (hasta 16 píxeles de ancho)
+  int anchoRelleno = (porcentaje * 16) / 100;
+  if (anchoRelleno > 0) {
+    display.fillRect(x + 2, y + 2, anchoRelleno, 6, GxEPD_BLACK);
+  }
+  display.setFont(&FreeMonoBold9pt7b);
+  display.setCursor(x-2, y + 24);
+  display.print(porcentaje);
+  display.print("%");
 }
 
 //Función para actualizar los datos de pantalla principal
@@ -112,8 +161,10 @@ void interfaz() {
     String aula = doc["actual"]["aula"].as<String>();
     display.setFont(&FreeSansBold12pt7b); 
     display.setTextColor(GxEPD_BLACK); 
-    display.setCursor(10, 25);
-    display.print(aula);
+    centrarTexto(aula, 25);
+
+    // Dibujar icono de Batería en la esquina superior derecha
+    dibujarBateria(10, 10);
 
     //Hora
     String hora = doc["actual"]["hora"].as<String>();
@@ -207,18 +258,22 @@ void interfaz2() {
     String asig = doc["proxima"]["asignatura"].as<String>();
     display.setFont(&FreeSansBold9pt7b); 
     display.setTextColor(GxEPD_BLACK); 
-    display.setCursor(5, 15);
-    display.print("Prox.: " + hora);
+    display.setCursor(5, 18);
+    display.print("Prox. Clase: " + hora);
 
-    if(asig.length() > 24) {
-      asig = asig.substring(0,23) + "...";
+    // Dibujar icono de Batería en la esquina superior derecha
+    dibujarBateria(210, 5);
+
+    //Si la asignatura es muy larga, ponemos ...
+    if(asig.length() > 22) {
+      asig = asig.substring(0,19) + "...";
     }
-    display.setCursor(5,38);
+    display.setCursor(5,42);
     display.print(asig);
 
     //Linea separadora
-    display.drawLine(5, 46, 245, 46, GxEPD_BLACK);
-    display.drawLine(5, 47, 245, 47, GxEPD_BLACK);
+    display.drawLine(5, 48, 245, 48, GxEPD_BLACK);
+    display.drawLine(5, 49, 245, 49, GxEPD_BLACK);
 
 
     //Incidencias
@@ -226,10 +281,10 @@ void interfaz2() {
     JsonArray incidencias = doc["incidencias_restantes"].as<JsonArray>();
     int y=65;
     
-    if(incidencias.size() == 0) {
+    if(incidencias.size() == 0) { //No hay incidencias
       display.setCursor(5, y);
       display.print("Sin incidencias hoy");
-    } else {
+    } else {  //Escribimos cada incidencia
       for (JsonObject i: incidencias) {
         String hora_incidencia = i["hora"].as<String>();
         String aviso_incidencia = i["aviso"].as<String>();
@@ -242,7 +297,7 @@ void interfaz2() {
         display.print(hora_incidencia + "|" + aviso_incidencia);
         y+=20;
 
-        if(y > 115) break; //Si no cabe mas en la pantalla paramos de escribir
+        if(y > 115) break; //Si no caben mas incidencias en la pantalla paramos de escribir
       }
     }
     
@@ -271,14 +326,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(String(jsonMem));
   Serial.print("JSON Memoria:");
   Serial.println(jsonMem);
-  if (json_entrante != String(jsonMem)) {
+  if (json_entrante != String(jsonMem)) { //Si es diferente lo actualizamos y activamos la variable cambio
     Serial.println("HAY CAMBIOS. Actualizando memoria RTC.");
     cambio = true;
     
     //Sobrescribimos los datos en la variable RTC
     strlcpy(jsonMem, json_entrante.c_str(), sizeof(jsonMem));
     Serial.println(jsonMem);
-  } else {
+  } else {  //Si es el mismo desactivamos cambio
     Serial.println("Es idéntico a la memoria.");
     cambio = false; 
   }  
@@ -312,7 +367,7 @@ void setup() {
   }
 
   
-  if (tocaActualizarWiFi) {
+  if (tocaActualizarWiFi) { //Se ha despertado porque ha pasado el tiempo
       Serial.println("MODO WIFI: Buscando nuevos datos MQTT...");
       
       WiFi.mode(WIFI_STA); //Nos aseguramos de que actúe como cliente, no como router
@@ -324,7 +379,7 @@ void setup() {
       Serial.print("Conectando a WiFi");
 
       unsigned long tiempoInicio = millis();
-      while (millis() - tiempoInicio < 10000 && WiFi.status() != WL_CONNECTED) {
+      while (millis() - tiempoInicio < 10000 && WiFi.status() != WL_CONNECTED) { //Intentamos conectar durante 10 segundos
         delay(500);
         Serial.print(".");
       }
@@ -356,8 +411,16 @@ void setup() {
           Serial.println("¡Conectado!");
           
           // Nos suscribimos al tema de pruebas
-          client.subscribe("aula/H1.10");
-          Serial.println("Suscrito al tema: aula/H1.10");
+          String topic_sub = "aula/" + nombreAula;
+          client.subscribe(topic_sub.c_str());
+          Serial.println("Suscrito al tema: " + topic_sub);
+
+          // Publicamos el nivel de bateria para el servidor
+          String topic_bateria = "aula/" + nombreAula + "/bateria";
+          int bateria = getBatteryPercentage();
+          client.publish(topic_bateria.c_str(), String(bateria).c_str(), true);
+          Serial.println("Bateria publicada en MQTT");
+        
           
         } else {
           Serial.print("Fallo, rc=");
@@ -404,7 +467,7 @@ void setup() {
       //Actualizamos la marca de tiempo para que empiece a contar desde ahora
       ultimaActualizacionWiFi = time(NULL);
       
-  } else {
+  } else { //Se ha despertado con el boton
       // Comprobamos si ha pasado el cooldown desde la última pulsación
       if (tiempoActual - ultimaPulsacion < COOLDOWN_BOTON) {
           Serial.println("ANTISPAM: Pulsación ignorada para proteger la batería.");
@@ -428,8 +491,6 @@ void setup() {
   }
 
 
-
-
   //Preparar el siguiente sueño
   Serial.println("Preparando para dormir...");
   display.powerOff(); // Apagamos la pantalla
@@ -449,9 +510,9 @@ void setup() {
       // Si nos despertamos por botón a la mitad del ciclo, solo dormimos el tiempo que falte
       tiempoDormir = INTERVALO_ACTUALIZACION - tiempoTranscurrido;
   } else {
-      //Si se ha pulsado el boton justo antes (2 o 3 segundos) del despertar normal, se establece el reinicio en 1 minuto
+      //Si se ha pulsado el boton justo antes (2 o 3 segundos) del despertar normal, se establece el reinicio en 10 segundos
       Serial.println("Error en intervalo");
-      tiempoDormir = 60; 
+      tiempoDormir = 10; 
   }
 
   Serial.print("Dormiremos durante ");

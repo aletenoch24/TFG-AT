@@ -14,6 +14,9 @@
 #define EPD_RST  16
 #define EPD_BUSY 4
 
+// Pin de lectura de batería interno de la Lilygo T5
+#define BATT_PIN 35
+
 //Datos de red
 const char* ssid = "Livebox7-A6B5-WiFi7";
 const char* password = "RQN64Zc75bf2";
@@ -86,6 +89,39 @@ void centrarTexto(String texto, int y) {
   display.print(texto);
 }
 
+// Función para calcular el porcentaje de batería
+int getBatteryPercentage() {
+  analogSetPinAttenuation(BATT_PIN, ADC_11db); // Permite leer hasta ~3.3V
+  int raw_value = analogRead(BATT_PIN);
+  
+  // El divisor de voltaje corta a la mitad (*2), el 3.3V es la referencia del ADC, 
+  // y 4095 es la resolución. 1.1 es un factor de corrección típico en los ESP32.
+  float voltage = (raw_value / 4095.0) * 3.3 * 2.0 * 1.1; 
+  
+  // Mapear de voltaje a porcentaje (4.2V max, 3.2V min para LiPo)
+  int percentage = (voltage - 3.2) / (4.2 - 3.2) * 100;
+  
+  if (percentage > 100) percentage = 100;
+  if (percentage < 0) percentage = 0;
+  
+  return percentage;
+}
+
+// Función para dibujar el icono de batería
+void dibujarBateria(int x, int y) {
+  int porcentaje = getBatteryPercentage();
+  
+  // Dibujar el marco de la pila
+  display.drawRect(x, y, 20, 10, GxEPD_BLACK);
+  display.fillRect(x + 20, y + 2, 2, 6, GxEPD_BLACK); // Borne positivo
+  
+  // Rellenar según el porcentaje (hasta 16 píxeles de ancho)
+  int anchoRelleno = (porcentaje * 16) / 100;
+  if (anchoRelleno > 0) {
+    display.fillRect(x + 2, y + 2, anchoRelleno, 6, GxEPD_BLACK);
+  }
+}
+
 //Función para actualizar los datos de pantalla principal
 void interfaz() {
 
@@ -114,6 +150,9 @@ void interfaz() {
     display.setTextColor(GxEPD_BLACK); 
     display.setCursor(10, 25);
     display.print(aula);
+
+    // Dibujar icono de Batería en la esquina superior derecha
+    dibujarBateria(220, 5);
 
     //Hora
     String hora = doc["actual"]["hora"].as<String>();
@@ -209,6 +248,9 @@ void interfaz2() {
     display.setTextColor(GxEPD_BLACK); 
     display.setCursor(5, 15);
     display.print("Prox.: " + hora);
+
+    // Dibujar icono de Batería en la esquina superior derecha
+    dibujarBateria(220, 5);
 
     if(asig.length() > 24) {
       asig = asig.substring(0,21) + "...";
@@ -356,8 +398,14 @@ void setup() {
           Serial.println("¡Conectado!");
           
           // Nos suscribimos al tema de pruebas
-          client.subscribe("aula/H1.10");
-          Serial.println("Suscrito al tema: aula/H1.10");
+          String topic_sub = "aula/" + nombreAula;
+          client.subscribe(topic_sub.c_str());
+          Serial.println("Suscrito al tema: " + topic_sub);
+
+          // Publicamos el nivel de bateria para el servidor
+          String topic_bateria = "aula/" + nombreAula + "/bateria";
+          client.publish(topic_bateria.c_str(), String(getBatteryPercentage()).c_str(), true);
+          Serial.println("Bateria publicada en MQTT");
           
         } else {
           Serial.print("Fallo, rc=");

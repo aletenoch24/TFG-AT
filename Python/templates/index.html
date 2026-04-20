@@ -1,69 +1,47 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Gestión de Aulas</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
-</head>
-<body>
-    <div class="contenedor">
+{% extends "base.html" %}
 
-        <div class="cabecera-panel">
-            <a href="/logout" class="btn-logout" title="Cerrar sesión">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 012 2v2h-2V4H5v16h9v-2h2v2a2 2 0 01-2 2H5a2 2 0 01-2-2V4a2 2 0 012-2h9z"/>
-                </svg>
-                Cerrar sesión
-            </a>
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title mb-0">Reportar una Incidencia</h3>
+            </div>
+            <div class="card-body">
+                <p class="card-text text-muted">Utiliza este formulario para notificar una cancelación de clase, cambio de aula u otro aviso importante.</p>
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="aula" class="form-label">Aula Afectada</label>
+                        <input type="text" class="form-control" id="aula" name="aula" placeholder="Ej: H1.10" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="estado" class="form-label">Tipo de Aviso</label>
+                        <input type="text" class="form-control" id="estado" name="estado" placeholder="Ej: Clase cancelada" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="hora" class="form-label">Hora de la Clase</label>
+                            <select class="form-select" id="hora" name="hora" required>
+                                <option value="" disabled selected>Selecciona una hora</option>
+                                <option value="08:30">8:30</option>
+                                <option value="10:40">10:40</option>
+                                <option value="12:30">12:30</option>
+                                <option value="15:30">15:30</option>
+                                <option value="17:40">17:40</option>
+                                <option value="19:40">19:40</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="fecha" class="form-label">Fecha</label>
+                            <input type="date" class="form-control" id="fecha" name="fecha" required>
+                        </div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">Enviar Incidencia</button>
+                    </div>
+                </form>
+            </div>
         </div>
-
-        <h1>Panel de Control</h1>
-        <p class="descripcion">Notifique los cambios en la programación del espacio.</p>
-
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="alerta-exito">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <form action="/" method="POST">
-            
-            <div class="grupo-formulario">
-                <label for="aula">Identificador del Aula/Despacho:</label>
-                <input type="text" id="aula" name="aula" placeholder="Ej: F1.30" required>
-            </div>
-
-            <div class="grupo-formulario">
-                <label for="estado">Nuevo Estado:</label>
-                <select id="estado" name="estado">
-                    <option value="Clase normal">Clase normal</option>
-                    <option value="Ausencia de profesor">Ausencia de profesor</option>
-                    <option value="Cambio de aula">Cambio de aula de última hora</option>
-                    <option value="Horario de tutorías">Horario de tutorías</option>
-                </select>
-            </div>
-
-            <div class="grupo-formulario">
-                <label for="hora">Hora:</label>
-                <select id="hora" name="hora">
-                    <option value="8:30">8:30</option>
-                    <option value="10:40">10:40</option>
-                    <option value="12:40">12:40</option>
-                    <option value="15:30">15:30</option>
-                    <option value="17:40">17:40</option>
-                    <option value="19:40">19:40</option>
-                </select>
-            </div>
-
-            <div class="grupo-formulario">
-                <label for="fecha">Fecha de la incidencia:</label>
-                <input type="date" id="fecha" name="fecha" required>
-            </div>
-
-            <button type="submit">Actualizar Pantalla</button>
-        </form>
     </div>
-</body>
-</html>
+</div>
+{% endblock %}

@@ -6,11 +6,51 @@ import sqlite3
 import unicodedata
 
 #Datos para la conexion MQTT
-broker = "192.168.1.20"
+broker = "192.168.1.17"
 puerto = 1883
+
+# Funciones de callback para recibir mensajes MQTT
+# Al iniciar el cliente se subscribe a todos los topics de baterias de las aulas
+def on_connect(client, userdata, flags, reason_code, properties):
+    print(f"Conectado a MQTT con código {reason_code}. Suscribiendo a baterías...")
+    client.subscribe("aula/+/bateria") # El '+' es un comodín para leer de cualquier aula
+
+def on_message(client, userdata, msg):
+    topic = msg.topic
+    payload = msg.payload.decode('utf-8')
+    
+    # El topic tiene el formato: aula/H1.10/bateria
+    partes = topic.split("/")
+    if len(partes) == 3 and partes[2] == "bateria":
+        aula = partes[1]
+        try:
+            porcentaje = int(payload)
+            
+            # Guardamos/Actualizamos en la base de datos
+            conn = sqlite3.connect("TFG.db")
+            conn.execute("PRAGMA foreign_keys = ON;")
+            cursor = conn.cursor()
+            
+            # Creamos la tabla si no existe
+            cursor.execute('''CREATE TABLE IF NOT EXISTS Baterias 
+                              (id_espacio TEXT PRIMARY KEY, 
+                               porcentaje INTEGER, 
+                               ultima_actualizacion DATETIME)''')
+            
+            # INSERT OR REPLACE sobrescribe el dato del aula si ya existía
+            cursor.execute('''INSERT OR REPLACE INTO Baterias (id_espacio, porcentaje, ultima_actualizacion)
+                              VALUES (?, ?, datetime('now', 'localtime'))''', (aula, porcentaje))
+            conn.commit()
+            conn.close()
+            
+            print(f"[MQTT] Batería actualizada -> {aula}: {porcentaje}%")
+        except Exception as e:
+            print(f"Error procesando batería: {e}")
 
 #Crea el cliente y se conecta
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+client.on_connect = on_connect
+client.on_message = on_message
 client.connect(broker, puerto, 60)
 client.loop_start() # Inicia el hilo en segundo plano de MQTT para procesar envíos y KeepAlive
 

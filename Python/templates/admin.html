@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title mb-0">Monitorización de Pantallas</h3>
+    </div>
+    <div class="card-body">
+        {% if baterias %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Aula</th>
+                        <th class="text-center">Nivel de Batería</th>
+                        <th>Última Conexión</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for id_espacio, porcentaje, ultima_actualizacion in baterias %}
+                    <tr>
+                        <td><strong>{{ id_espacio }}</strong></td>
+                        <td>
+                            {% set color = 'success' %}
+                            {% if porcentaje < 50 %} {% set color = 'warning' %} {% endif %}
+                            {% if porcentaje < 20 %} {% set color = 'danger' %} {% endif %}
+                            
+                            {% set estilo_ancho = 'style="width: ' ~ porcentaje ~ '%;"' %}
+                            
+                            <div class="progress" style="height: 25px;">
+                                <!-- Usamos 'safe' para inyectarlo sin que VS Code lo analice como CSS -->
+                                <div class="progress-bar bg-{{ color }}" role="progressbar" {{ estilo_ancho | safe }} aria-valuenow="{{ porcentaje }}">
+                                    {{ porcentaje }}%
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ ultima_actualizacion }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary text-center">
+            Aún no se ha recibido información de batería de ninguna pantalla.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

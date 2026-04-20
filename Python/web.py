@@ -15,6 +15,10 @@ def index():
     if 'usuario' not in session:
         return redirect(url_for('login'))
 
+    # Si es un admin y entra aquí por error, lo mandamos a su panel
+    if session.get('rol') == 'admin':
+        return redirect(url_for('admin'))
+
     mensaje_exitoso = ""
     if request.method == "POST":
         aula = request.form.get("aula")
@@ -38,6 +42,33 @@ def index():
     
     return render_template('index.html')
 
+# RUTA DE ADMIN (PANEL DE BATERIAS)
+@app.route('/admin')
+def admin():
+    if 'usuario' not in session:
+        return redirect(url_for('login'))
+        
+    # Protegemos la ruta para que un profesor no pueda entrar aquí
+    if session.get('rol') != 'admin':
+        flash("Acceso denegado. No tienes permisos de administrador.")
+        return redirect(url_for('index'))
+
+    baterias = [] # Por defecto, una lista vacía
+    try:
+        conn = sqlite3.connect("TFG.db")
+        cursor = conn.cursor()
+        # Obtenemos el estado de todas las pantallas
+        cursor.execute("SELECT id_espacio, porcentaje, ultima_actualizacion FROM Baterias ORDER BY id_espacio ASC")
+        baterias = cursor.fetchall()
+        conn.close()
+    except sqlite3.OperationalError:
+        # Si la tabla Baterias no existe todavía mostraremos una lista vacía y un aviso.
+        flash("La tabla de monitorización aún no existe. Esperando datos de las pantallas...")
+    except Exception as e:
+        flash(f"Error al acceder a la base de datos: {e}")
+
+    return render_template('admin.html', baterias=baterias)
+
 # RUTA DE LOGIN
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -55,7 +86,8 @@ def login():
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.execute("PRAGMA journal_mode = WAL;")
         cursor = conn.cursor()
-        cursor.execute("SELECT contraseña FROM usuarios WHERE usuario = ?", (usuario_intento,))
+        # Ahora pedimos también el rol a la base de datos
+        cursor.execute("SELECT contraseña, rol FROM usuarios WHERE usuario = ?", (usuario_intento,))
         resultado = cursor.fetchone()
         conn.close()
 
@@ -63,12 +95,18 @@ def login():
         if resultado:
             # Recuperamos el hash de la base de datos (y lo pasamos a bytes)
             password_hash_db = resultado[0].encode('utf-8')
+            rol_db = resultado[1]
             
             # Comprobamos si coinciden
             if bcrypt.checkpw(password_intento, password_hash_db):
-                # Le damos la credencial guardando su nombre en la sesión
+                # Guardamos su nombre y su rol en la sesión
                 session['usuario'] = usuario_intento
-                return redirect(url_for('index'))
+                session['rol'] = rol_db
+                
+                if rol_db == 'admin':
+                    return redirect(url_for('admin'))
+                else:
+                    return redirect(url_for('index'))
             else:
                 flash("Contraseña incorrecta.")
         else:
@@ -101,6 +139,7 @@ def registro():
         conn.close()
         
         session['usuario'] = usuario_nuevo
+        session['rol'] = 'profesor' # Al registrarse por la web, es profesor por defecto
         
         # Le damos una bienvenida personalizada
         flash(f"¡Bienvenido/a, {usuario_nuevo}! Tu cuenta ha sido creada y ya estás dentro.")
@@ -125,6 +164,7 @@ def registro():
 def logout():
     # Borramos al usuario de la sesión
     session.pop('usuario', None)
+    session.pop('rol', None)
     return redirect(url_for('login'))
 
 
