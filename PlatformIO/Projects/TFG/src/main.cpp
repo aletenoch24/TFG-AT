@@ -60,6 +60,13 @@ const uint64_t INTERVALO_ACTUALIZACION = 20;
 RTC_DATA_ATTR uint64_t ultimaPulsacion = 0; 
 const uint64_t COOLDOWN_BOTON = 5; // Segundos de bloqueo entre pulsaciones
 
+// Variables globales para guardar la lectura de batería de forma estática
+float voltaje_bateria_actual = 0.0;
+int porcentaje_bateria_actual = 0;
+
+//Variable para contar cuantas veces ha fallado al conectarse al wifi
+int intentos_wifi = 0;
+
 // Función para averiguar por qué nos hemos despertado
 void imprimir_motivo_despertar() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -90,35 +97,44 @@ void centrarTexto(String texto, int y) {
 }
 
 // Función para calcular el porcentaje de batería
-int getBatteryPercentage() {
+void getBatteryPercentage() {
   analogSetPinAttenuation(BATT_PIN, ADC_11db); // Permite leer hasta ~3.3V
 
-  // Lectura "basura" para estabilizar el circuito interno
+  // Lectura basura para estabilizar el circuito interno
   analogRead(BATT_PIN); 
   delay(5);
 
-  int raw_value = analogRead(BATT_PIN);
-  Serial.print("ADC Value: ");
+  // Tomamos varias muestras para promediar y estabilizar el valor
+  long sum_raw = 0;
+  const int num_muestras = 20;
+  for (int i = 0; i < num_muestras; i++) {
+    sum_raw += analogRead(BATT_PIN);
+    delay(5); // Pequeña pausa entre lecturas
+  }
+  float raw_value = sum_raw / (float)num_muestras;
+
+  Serial.print("ADC Value (Promedio): ");
   Serial.println(String(raw_value));
   
   // El divisor de voltaje corta a la mitad (*2), el 3.3V es la referencia del ADC, 
-  // y 4095 es la resolución. 1.1 es un factor de corrección típico en los ESP32.
-  float voltage = (raw_value / 4095.0) * 3.3 * 2.0 * 1.1; 
+  // y 4095 es la resolución. Multiplicamos por un factor de corrección ajustado.
+  float factor_correccion = 1.135; 
+  voltaje_bateria_actual = (raw_value / 4095.0) * 3.3 * 2.0 * factor_correccion; 
   
   // Mapear de voltaje a porcentaje (4.2V max, 3.2V min para LiPo)
-  int percentage = (voltage - 3.2) / (4.2 - 3.2) * 100;
+  int percentage = (voltaje_bateria_actual - 3.2) / (4.2 - 3.2) * 100;
   Serial.print("Porcentaje: ");
   Serial.println(String(percentage));
   
   if (percentage > 100) percentage = 100;
   if (percentage < 0) percentage = 0;
   
-  return percentage;
+  porcentaje_bateria_actual = percentage;
 }
 
 // Función para dibujar el icono de batería
 void dibujarBateria(int x, int y) {
-  int porcentaje = getBatteryPercentage();
+  int porcentaje = porcentaje_bateria_actual; // Usamos el valor guardado
   
   // Dibujar el marco de la pila
   display.drawRect(x, y, 20, 10, GxEPD_BLACK);
@@ -355,7 +371,7 @@ void setup() {
   ++bootCount ;                   
   Serial.println("Boot number: " + String(bootCount));  
 
-
+  getBatteryPercentage();
   bool tocaActualizarWiFi = false;
 
   //Miramos los segundos actuales
@@ -387,12 +403,18 @@ void setup() {
       //En caso de no conectarse en 10 segundos apagamos para no consumir mas batería.
       if (WiFi.status() != WL_CONNECTED) {
         Serial.println("\nFallo al conectar WiFi.");
-        esp_sleep_enable_timer_wakeup(5 * 1000000ULL);
+        intentos_wifi++;
+        if (intentos_wifi == 3) { //Si ha fallado 3 veces seguidas en conectarse al WiFi, lo apagamos mas tiempo
+          esp_sleep_enable_timer_wakeup(60 * 1000000ULL);
+        }else {
+          esp_sleep_enable_timer_wakeup(5 * 1000000ULL);
+        }
         display.powerOff(); 
         Serial.flush();
         esp_deep_sleep_start(); 
       }
 
+      intentos_wifi = 0;
       Serial.println("\nWiFi Conectado!");
       Serial.print("IP del ESP32: ");
       Serial.println(WiFi.localIP());
@@ -417,11 +439,14 @@ void setup() {
 
           // Publicamos el nivel de bateria para el servidor
           String topic_bateria = "aula/" + nombreAula + "/bateria";
-          int bateria = getBatteryPercentage();
-          client.publish(topic_bateria.c_str(), String(bateria).c_str(), true);
+          client.publish(topic_bateria.c_str(), String(porcentaje_bateria_actual).c_str(), true);
           Serial.println("Bateria publicada en MQTT");
         
           
+          // Publicamos el voltaje para debug
+          String topic_voltage = "aula/" + nombreAula + "/voltage";
+          client.publish(topic_voltage.c_str(), String(voltaje_bateria_actual).c_str(), true);
+
         } else {
           Serial.print("Fallo, rc=");
           Serial.print(client.state());
