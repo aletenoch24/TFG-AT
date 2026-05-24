@@ -14,7 +14,7 @@
 #define EPD_RST  16
 #define EPD_BUSY 4
 
-// Pin de lectura de batería interno de la Lilygo T5
+//Pin de lectura de batería interno de la Lilygo T5
 #define BATT_PIN 35
 
 //Datos de red
@@ -22,52 +22,54 @@ const char* ssid = "Livebox7-A6B5-WiFi7";
 const char* password = "RQN64Zc75bf2";
 
 //Datos del broker mqtt
-const char* mqtt_server = "192.168.1.17"; 
+const char* mqtt_server = "192.168.1.22"; 
 const int mqtt_port = 1883;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Constructor de la pantalla 
+//Constructor de la pantalla 
 GxEPD2_BW<GxEPD2_213_B74, GxEPD2_213_B74::HEIGHT> display(GxEPD2_213_B74(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
 //Nombre del dispositivo (a cambiar para cada dispositivo)
 String nombreAula = "H1.10";
 
+//Variable que almacena el ultimo bloque de datos distinto recibido
 RTC_DATA_ATTR char jsonMem[1024] = "{}";
 
-// Variable para detectar si se ha recibido un mensaje para apagar el ESP.
+//Variable para detectar si se ha recibido un mensaje para apagar el ESP.
 bool mensajeRecibido = false;
 
-// Variable para detectar si el mensaje recibido es el mismo al actualmente escrito
+//Variable para detectar si el mensaje recibido es el mismo al actualmente escrito
 bool cambio = false;
 
 //Variable que cuenta cuantas veces el ESP se "despierta"
 RTC_DATA_ATTR int bootCount = 0;
 
+//Variable para alternar pantallas
 RTC_DATA_ATTR int pantalla_actual = 0; // 0 = Clase normal, 1 = Incidencias
 
-// Pin del botón
+//Pin del botón
 const int PIN_BOTON = 39;
 
-// Variable para guardar el momento de la última actualización WiFi exitosa
+//Variable para guardar el momento de la última actualización WiFi exitosa
 RTC_DATA_ATTR uint64_t ultimaActualizacionWiFi = 0; 
 
-// El intervalo en segundos en el que queremos que se actualicen los datos por WiFi
-const uint64_t INTERVALO_ACTUALIZACION = 20;
+//El intervalo en segundos en el que queremos que se actualicen los datos por WiFi
+const uint64_t INTERVALO_ACTUALIZACION = 30 * 60;
 
-// Variable para guardar el momento del último cambio de pantalla por botón
+//Variable para guardar el momento del último cambio de pantalla por botón
 RTC_DATA_ATTR uint64_t ultimaPulsacion = 0; 
-const uint64_t COOLDOWN_BOTON = 5; // Segundos de bloqueo entre pulsaciones
+const uint64_t COOLDOWN_BOTON = 10; // Segundos de bloqueo entre pulsaciones
 
-// Variables globales para guardar la lectura de batería de forma estática
+//Variables globales para guardar la lectura de batería de forma estática
 float voltaje_bateria_actual = 0.0;
 int porcentaje_bateria_actual = 0;
 
 //Variable para contar cuantas veces ha fallado al conectarse al wifi
-int intentos_wifi = 0;
+RTC_DATA_ATTR int intentos_wifi = 0;
 
-// Función para averiguar por qué nos hemos despertado
+//Función para averiguar por qué nos hemos despertado
 void imprimir_motivo_despertar() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
@@ -98,13 +100,13 @@ void centrarTexto(String texto, int y) {
 
 // Función para calcular el porcentaje de batería
 void getBatteryPercentage() {
-  analogSetPinAttenuation(BATT_PIN, ADC_11db); // Permite leer hasta ~3.3V
+  analogSetPinAttenuation(BATT_PIN, ADC_11db); // Permite leer hasta ~4.4V
 
-  // Lectura basura para estabilizar el circuito interno
+  //Lectura basura para estabilizar el circuito interno
   analogRead(BATT_PIN); 
   delay(5);
 
-  // Tomamos varias muestras para promediar y estabilizar el valor
+  //Tomamos varias muestras para promediar y estabilizar el valor
   long sum_raw = 0;
   const int num_muestras = 20;
   for (int i = 0; i < num_muestras; i++) {
@@ -116,12 +118,11 @@ void getBatteryPercentage() {
   Serial.print("ADC Value (Promedio): ");
   Serial.println(String(raw_value));
   
-  // El divisor de voltaje corta a la mitad (*2), el 3.3V es la referencia del ADC, 
-  // y 4095 es la resolución. Multiplicamos por un factor de corrección ajustado.
-  float factor_correccion = 1.135; 
+  //El divisor de voltaje corta a la mitad (*2), el 3.3V es la referencia del ADC, y 4095 es la resolución. 
+  float factor_correccion = 1.134; //Multiplicamos por un factor de corrección ajustado.
   voltaje_bateria_actual = (raw_value / 4095.0) * 3.3 * 2.0 * factor_correccion; 
   
-  // Mapear de voltaje a porcentaje (4.2V max, 3.2V min para LiPo)
+  //Pasar de voltaje a porcentaje (4.2V max, 3.2V min para LiPo)
   int percentage = (voltaje_bateria_actual - 3.2) / (4.2 - 3.2) * 100;
   Serial.print("Porcentaje: ");
   Serial.println(String(percentage));
@@ -132,15 +133,15 @@ void getBatteryPercentage() {
   porcentaje_bateria_actual = percentage;
 }
 
-// Función para dibujar el icono de batería
+//Función para dibujar el icono de batería
 void dibujarBateria(int x, int y) {
-  int porcentaje = porcentaje_bateria_actual; // Usamos el valor guardado
+  int porcentaje = porcentaje_bateria_actual; //Usamos el valor guardado
   
-  // Dibujar el marco de la pila
+  //Dibujar el marco de la pila
   display.drawRect(x, y, 20, 10, GxEPD_BLACK);
-  display.fillRect(x + 20, y + 2, 2, 6, GxEPD_BLACK); // Borne positivo
+  display.fillRect(x + 20, y + 2, 2, 6, GxEPD_BLACK); //Borne positivo
   
-  // Rellenar según el porcentaje (hasta 16 píxeles de ancho)
+  //Rellenar según el porcentaje (hasta 16 píxeles de ancho)
   int anchoRelleno = (porcentaje * 16) / 100;
   if (anchoRelleno > 0) {
     display.fillRect(x + 2, y + 2, anchoRelleno, 6, GxEPD_BLACK);
@@ -179,7 +180,7 @@ void interfaz() {
     display.setTextColor(GxEPD_BLACK); 
     centrarTexto(aula, 25);
 
-    // Dibujar icono de Batería en la esquina superior derecha
+    //Dibujar icono de Batería en la esquina superior derecha
     dibujarBateria(10, 10);
 
     //Hora
@@ -359,6 +360,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 void setup() {
+
   Serial.begin(115200);
   delay(1000); 
   Serial.println("Arrancando sistema TFG...");
@@ -371,6 +373,7 @@ void setup() {
   ++bootCount ;                   
   Serial.println("Boot number: " + String(bootCount));  
 
+  //Obtenemos el porcentaje de bateria antes de encender el Wi-Fi
   getBatteryPercentage();
   bool tocaActualizarWiFi = false;
 
@@ -382,6 +385,8 @@ void setup() {
       tocaActualizarWiFi = true;
   }
 
+  //Guardamos el tiempo de inicio para calcular cuánto hemos estado despiertos
+  unsigned long tiempoInicioBoot = millis();
   
   if (tocaActualizarWiFi) { //Se ha despertado porque ha pasado el tiempo
       Serial.println("MODO WIFI: Buscando nuevos datos MQTT...");
@@ -391,6 +396,7 @@ void setup() {
       delay(100);
       
       // Conectar al WiFi
+      unsigned long tiempoInicioWifi = millis();
       WiFi.begin(ssid, password);
       Serial.print("Conectando a WiFi");
 
@@ -405,15 +411,17 @@ void setup() {
         Serial.println("\nFallo al conectar WiFi.");
         intentos_wifi++;
         if (intentos_wifi == 3) { //Si ha fallado 3 veces seguidas en conectarse al WiFi, lo apagamos mas tiempo
-          esp_sleep_enable_timer_wakeup(60 * 1000000ULL);
+          esp_sleep_enable_timer_wakeup(60 * 30 * 1000000ULL);
         }else {
-          esp_sleep_enable_timer_wakeup(5 * 1000000ULL);
+          esp_sleep_enable_timer_wakeup(10 * 1000000ULL);
         }
         display.powerOff(); 
+        Serial.print("Tiempo total despierto (Fallo WiFi) ms: ");
+        Serial.println(millis() - tiempoInicioBoot);
         Serial.flush();
         esp_deep_sleep_start(); 
       }
-
+      
       intentos_wifi = 0;
       Serial.println("\nWiFi Conectado!");
       Serial.print("IP del ESP32: ");
@@ -426,24 +434,24 @@ void setup() {
       client.setBufferSize(1024);
 
       //Conectarse a MQTT 
-      Serial.print("Conectando al Broker MQTT");
+      Serial.print("Conectando al Broker MQTT\n");
       int intentosMQTT = 0;
       while (!client.connected() && intentosMQTT < 5) {
         if (client.connect(nombreAula.c_str(), NULL, NULL, 0, 0, 0, 0, 1)) {
           Serial.println("¡Conectado!");
           
-          // Nos suscribimos al tema de pruebas
+          //Nos suscribimos al tema del aula
           String topic_sub = "aula/" + nombreAula;
           client.subscribe(topic_sub.c_str());
           Serial.println("Suscrito al tema: " + topic_sub);
 
-          // Publicamos el nivel de bateria para el servidor
+          //Publicamos el nivel de bateria para el servidor
           String topic_bateria = "aula/" + nombreAula + "/bateria";
           client.publish(topic_bateria.c_str(), String(porcentaje_bateria_actual).c_str(), true);
           Serial.println("Bateria publicada en MQTT");
         
           
-          // Publicamos el voltaje para debug
+          //Publicamos el voltaje para debug
           String topic_voltage = "aula/" + nombreAula + "/voltage";
           client.publish(topic_voltage.c_str(), String(voltaje_bateria_actual).c_str(), true);
 
@@ -459,8 +467,10 @@ void setup() {
       //Si no se pudo conectar en los intentos, lo volvemos a intentar en 1 minuto para ahorrar energia 
       if (!client.connected()) {
         Serial.println("Imposible conectar al Broker. Abortando y a dormir.");
-        esp_sleep_enable_timer_wakeup(60 * 1000000ULL); // Reintento en 1 minuto
+        esp_sleep_enable_timer_wakeup(60 * 30 * 1000000ULL); // Reintento en 30 minuto
         display.powerOff(); 
+        Serial.print("Tiempo total despierto (Fallo MQTT) ms: ");
+        Serial.println(millis() - tiempoInicioBoot);
         Serial.flush();
         esp_deep_sleep_start();
       }
@@ -473,6 +483,13 @@ void setup() {
         // En cuanto recibimos el mensaje retenido, comprobamos si hay que dibujar y salimos del bucle
         if(mensajeRecibido) {
           if(cambio) {
+          // APAGAMOS WIFI ANTES DE DIBUJAR
+          Serial.print("Tiempo despierto con wifi encendido\n");
+          Serial.println(millis() - tiempoInicioWifi);
+          Serial.println("Apagando WiFi antes de redibujar para ahorrar batería...");
+          WiFi.disconnect(true);
+          WiFi.mode(WIFI_OFF);
+          
             display.init(115200);
             interfaz();
             pantalla_actual = 0;
@@ -483,6 +500,11 @@ void setup() {
       }
       //En caso de que no haya cambio y este en la pantalla de incidencias, se vuelve a la pantalla original
       if (!cambio && pantalla_actual == 1) {
+          Serial.print("Tiempo despierto con wifi encendido");
+          Serial.println(millis() - tiempoInicioWifi);
+          Serial.println("Apagando WiFi antes de redibujar para ahorrar batería...");
+          WiFi.disconnect(true);
+          WiFi.mode(WIFI_OFF);
           Serial.println("Restaurando pantalla principal por defecto...");
           display.init(115200);
           interfaz();
@@ -546,6 +568,8 @@ void setup() {
 
   esp_sleep_enable_timer_wakeup(tiempoDormir * 1000000ULL); 
 
+  Serial.print("Tiempo total despierto en este ciclo (ms): ");
+  Serial.println(millis() - tiempoInicioBoot);
   Serial.println("Entrando en Deep Sleep. Zzz...");
   Serial.flush();
   esp_deep_sleep_start();
